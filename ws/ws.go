@@ -1,13 +1,43 @@
 package ws
 
 import (
+	"encoding/json"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"log/slog"
 	"net/http"
+	"secure-chat/service"
+	"sync"
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true }, // adjust in prod
+}
+
+var wsAuthHeader = "Authorization"
+
+type client struct {
+	UserID uuid.UUID
+	Conn   *websocket.Conn
+}
+
+var (
+	clients = make(map[string]*client)
+	mu      sync.RWMutex
+)
+
+type WsSendNewMessage struct {
+	ToUserID           uuid.UUID `json:"toUserId"`
+	CipherText         string    `json:"cipherText"`
+	SenderIdentityId   string    `json:"senderIdentityId"`   //used to know how to get the key!!
+	ReceiverIdentityId string    `json:"ReceiverIdentityId"` //same here, these should always be the last/newest identity
+}
+
+type WsNewMessageRecieved struct {
+	FromUserID         uuid.UUID `json:"fromUserId"`
+	CipherText         string    `json:"cipherText"`
+	SenderIdentityId   string    `json:"senderIdentityId"`
+	ReceiverIdentityId string    `json:"ReceiverIdentityId"`
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -17,21 +47,100 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
-	conn.WriteMessage(websocket.TextMessage, []byte("Hello, World!"))
+	//FIXME: this is temp header for testing without auth!
+	jwtHeaderVal := r.Header[wsAuthHeader]
+	if len(jwtHeaderVal) == 0 || len(jwtHeaderVal) > 1 {
+		return
+	}
+
+	//FIXME: currently jwt verification only happens when client connects, we have to check it on each action we preform, to validate the session is still valid
+	jwt := jwtHeaderVal[0]
+	claims, jwtErr := service.VerifyJWT(jwt)
+	if jwtErr != nil {
+		//TODO: tell client jwt is invalid
+		return
+	}
+	usrId := claims.UserID
+	userUUID, uuidErr := uuid.Parse(usrId)
+	if uuidErr != nil {
+		//TODO: tell user jwt (user-id) is invalid!!!
+		return
+	}
+
+	mu.Lock()
+	//closing old connections on reconnect
+	removeClient(usrId)
+
+	clients[usrId] = &client{
+		UserID: userUUID,
+		Conn:   conn,
+	}
+	mu.Unlock()
 
 	for {
-		msgType, msg, err := conn.ReadMessage()
-		if err != nil {
-			slog.Error("Read error, closing connection", "error", err)
-			break
+		msgType, msg, msgReadErr := conn.ReadMessage()
+		if msgReadErr != nil {
+			removeClient(usrId)
+			break // client disconnected
 		}
 
-		slog.Info("Received message", "msg", string(msg))
+		if msgType == websocket.TextMessage {
+			//TODO: currently sending a message is the only request client can make to WS, add message type to generic struct so we know what action client wants to preform
+			var sendMsg WsSendNewMessage
+			parseError := json.Unmarshal(msg, &sendMsg)
+			if parseError != nil {
+				//TODO notify client of error
+				continue
+			}
 
-		// Example: echo back
-		if err := conn.WriteMessage(msgType, msg); err != nil {
-			slog.Error("Write error, closing connection", "error", err)
-			break
+			//TODO: verify everything is set!!!
+			message := WsNewMessageRecieved{
+				CipherText:         sendMsg.CipherText,
+				FromUserID:         userUUID,
+				SenderIdentityId:   sendMsg.SenderIdentityId,
+				ReceiverIdentityId: sendMsg.ReceiverIdentityId,
+			}
+
+			sendMessageToClient(sendMsg.ToUserID, message)
+			continue
 		}
+
+		if msgType == websocket.CloseMessage {
+			removeClient(usrId)
+			return
+		}
+
+		unsupportedErr := conn.WriteMessage(websocket.TextMessage, []byte("UNSUPPORTED-MSG-TYPE"))
+		if unsupportedErr != nil {
+			removeClient(usrId)
+			return
+		}
+	}
+}
+
+// TODO: store message in db!!!
+func sendMessageToClient(recipient uuid.UUID, message WsNewMessageRecieved) {
+	if c, ok := clients[recipient.String()]; ok {
+		parsedMsg, parsedMsgErr := json.Marshal(message)
+		if parsedMsgErr != nil {
+			slog.Error("failed to marshal message", "error", parsedMsgErr.Error())
+			//FIXME: tell client about the error!!1
+			return
+		}
+		writeErr := c.Conn.WriteMessage(websocket.TextMessage, parsedMsg)
+		if writeErr != nil {
+			slog.Error("failed to write message", "error", writeErr.Error())
+			//FIXME: can we tell the client that it failed???
+		}
+	}
+}
+
+func removeClient(usrId string) {
+	if old, ok := clients[usrId]; ok {
+		oldClientErr := old.Conn.Close()
+		if oldClientErr != nil {
+			slog.Warn("Failed to close old client", "error", oldClientErr)
+		}
+		delete(clients, usrId)
 	}
 }

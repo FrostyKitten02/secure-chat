@@ -4,4 +4,5 @@ package env
 type Options struct {
 	HttpPort           int    `help:"Http port" default:"8080"`
 	DbConnectionString string `help:"PostgreSQL connection string"`
+	JwtSecret          string `help:"JWT secret"`
 }
