@@ -63,7 +63,7 @@ func VerifyJWT(jwtToken string) (*Claims, error) {
 }
 
 func AuthMiddleware(handler http.Handler) http.Handler {
-	excludedPaths := []string{"/auth", "/docs", "/openapi.yaml"}
+	excludedPaths := []string{"/auth", "/docs", "/openapi.yaml", "/openapi.json"}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip auth for excluded paths
 		for _, path := range excludedPaths {
