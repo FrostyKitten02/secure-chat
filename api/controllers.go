@@ -5,7 +5,7 @@ import (
 	"secure-chat/env"
 )
 
-var controllers []Controller = []Controller{authController, chatController}
+var controllers []Controller = []Controller{authController, chatController, usersController}
 
 type Controller func(api huma.API, options *env.Options)
 

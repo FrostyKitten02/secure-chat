@@ -36,3 +36,21 @@ func GetChatsForUser(ctx context.Context, userID uuid.UUID) ([]dto.ChatDto, erro
 
 	return res, nil
 }
+
+func CreateChatWithUser(ctx context.Context, myID, otherID string) error {
+	meUUID, err := uuid.Parse(myID)
+	if err != nil {
+		return err
+	}
+	otherUUID, err := uuid.Parse(otherID)
+	if err != nil {
+		return err
+	}
+
+	err = repo.CreateChatIfNotExists(ctx, meUUID.String(), otherUUID.String())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

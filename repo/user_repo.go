@@ -3,12 +3,9 @@ package repo
 import (
 	"context"
 	"errors"
-	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"secure-chat/repo/model"
 )
-
-var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 func FindUserByUsername(ctx context.Context, username string) (*model.User, error) {
 	sql, args, err := psql.

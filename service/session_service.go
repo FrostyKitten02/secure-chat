@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-const userIdKey = "userId"
+type ctxKey string
+
+var userIDCtxKey ctxKey = "userId"
 
 var jwtSecret = []byte(os.Getenv("SERVICE_JWT_SECRET"))
 
@@ -93,13 +95,13 @@ func AuthMiddleware(handler http.Handler) http.Handler {
 			http.Error(w, "invalid or expired user id", http.StatusUnauthorized)
 		}
 		// Add userID to request context
-		ctx := context.WithValue(r.Context(), userIdKey, userId)
+		ctx := context.WithValue(r.Context(), userIDCtxKey, userId)
 		handler.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func GetUserID(ctx context.Context) *uuid.UUID {
-	if v, ok := ctx.Value(userIdKey).(uuid.UUID); ok {
+	if v, ok := ctx.Value(userIDCtxKey).(uuid.UUID); ok {
 		return &v
 	}
 
