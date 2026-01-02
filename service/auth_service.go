@@ -62,6 +62,12 @@ func LoginUser(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 		slog.Error("Error generating JWT token", "error", jwtErr.Error())
 		return nil, huma.Error500InternalServerError("Internal Server Error", jwtErr)
 	}
+
+	identity, identityErr := repo.FindActiveIdentityForUser(context.Background(), dbUser.ID.String())
+	if identityErr != nil {
+		return nil, huma.Error500InternalServerError("Internal server error", identityErr)
+	}
+
 	return &dto.LoginResponse{
 		Status: http.StatusOK,
 		Body: dto.LoginResponseBody{
@@ -69,6 +75,9 @@ func LoginUser(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 			TokenType:    "Bearer",
 			ExpiresIn:    int(expiresIn.Seconds()),
 			RefreshToken: "REFRESH_TOKEN", //TODO!!!
+
+			PubKey:     identity.PubKey,
+			EncPrivKey: base64.StdEncoding.EncodeToString(identity.EncPrivKey),
 		},
 	}, nil
 }

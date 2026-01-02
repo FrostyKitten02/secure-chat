@@ -33,4 +33,7 @@ type LoginResponseBody struct {
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
 	RefreshToken string `json:"refresh_token"`
+	//additional data!!
+	PubKey     string `json:"pubKey"`
+	EncPrivKey string `json:"encPrivKey"`
 }

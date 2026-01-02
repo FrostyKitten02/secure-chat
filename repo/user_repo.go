@@ -116,3 +116,31 @@ func SaveUser(ctx context.Context, user model.User, identity model.Identity) err
 
 	return tx.Commit(ctx)
 }
+
+func FindUserByID(ctx context.Context, id string) (*model.User, error) {
+	sql, args, err := psql.
+		Select("id", "username", "email", "password", "created_at").
+		From("user_tbl").
+		Where("id = ?", id).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var u model.User
+	err = Pool.QueryRow(ctx, sql, args...).Scan(
+		&u.ID,
+		&u.Username,
+		&u.Email,
+		&u.Password,
+		&u.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // user not found
+		}
+		return nil, err
+	}
+
+	return &u, nil
+}

@@ -1,13 +1,16 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"log/slog"
 	"net/http"
+	"secure-chat/repo"
 	"secure-chat/service"
 	"sync"
+	"time"
 )
 
 var upgrader = websocket.Upgrader{
@@ -120,6 +123,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 // TODO: store message in db!!!
 func sendMessageToClient(recipient uuid.UUID, message WsNewMessageRecieved) {
+	go func(sender string, receiver uuid.UUID) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := repo.CreateChatIfNotExists(ctx, sender, receiver.String()); err != nil {
+			slog.Error(
+				"failed to create chat",
+				"sender", sender,
+				"receiver", receiver.String(),
+				"error", err.Error(),
+			)
+		}
+	}(message.SenderIdentityId, recipient)
+
 	if c, ok := clients[recipient.String()]; ok {
 		parsedMsg, parsedMsgErr := json.Marshal(message)
 		if parsedMsgErr != nil {
