@@ -3,21 +3,20 @@ package repo
 import (
 	"context"
 	sq "github.com/Masterminds/squirrel"
+	"github.com/google/uuid"
 	"secure-chat/repo/model"
 )
 
 // Search users by username excluding those already in my chats
-func SearchUsersByUsernameExcludingChats(ctx context.Context, myID, query string) ([]model.User, error) {
-	subQuery1, _, _ := psql.Select("user_1_id").From("chat").Where("user_2_id = ?", myID).ToSql()
-	subQuery2, _, _ := psql.Select("user_2_id").From("chat").Where("user_1_id = ?", myID).ToSql()
-
-	sql, args, err := psql.Select("id", "username", "email").
+func SearchUsersByUsernameExcludingChats(ctx context.Context, myID uuid.UUID, query string) ([]model.User, error) {
+	sql, args, err := psql.
+		Select("id", "username", "email").
 		From("user_tbl").
 		Where(sq.And{
 			sq.Like{"username": "%" + query + "%"},
 			sq.NotEq{"id": myID},
-			sq.Expr("id NOT IN ("+subQuery1+")", myID),
-			sq.Expr("id NOT IN ("+subQuery2+")", myID),
+			sq.Expr("id NOT IN (SELECT user_1_id FROM chat WHERE user_2_id = ?::uuid)", myID),
+			sq.Expr("id NOT IN (SELECT user_2_id FROM chat WHERE user_1_id = ?::uuid)", myID),
 		}).
 		ToSql()
 	if err != nil {

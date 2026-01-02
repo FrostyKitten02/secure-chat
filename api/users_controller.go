@@ -19,7 +19,7 @@ func usersController(api huma.API, options *env.Options) {
 			return nil, huma.Error401Unauthorized("Unauthorized")
 		}
 
-		users, err := service.SearchUsersExcludingChats(ctx, userID.String(), params.Query)
+		users, err := service.SearchUsersExcludingChats(ctx, *userID, params.Query)
 		if err != nil {
 			return nil, err
 		}

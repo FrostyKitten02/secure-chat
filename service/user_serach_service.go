@@ -2,12 +2,13 @@ package service
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"secure-chat/dto"
 	"secure-chat/repo"
 )
 
 // Search users by query, exclude users already in my chats
-func SearchUsersExcludingChats(ctx context.Context, myID string, query string) ([]dto.UserListItemDto, error) {
+func SearchUsersExcludingChats(ctx context.Context, myID uuid.UUID, query string) ([]dto.UserListItemDto, error) {
 	users, err := repo.SearchUsersByUsernameExcludingChats(ctx, myID, query)
 	if err != nil {
 		return nil, err
