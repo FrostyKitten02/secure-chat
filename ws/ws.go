@@ -32,6 +32,7 @@ var (
 type WsSendNewMessage struct {
 	ToUserID           uuid.UUID `json:"toUserId"`
 	CipherText         string    `json:"cipherText"`
+	Nonce              string    `json:"nonce"`
 	SenderIdentityId   string    `json:"senderIdentityId"`   //used to know how to get the key!!
 	ReceiverIdentityId string    `json:"ReceiverIdentityId"` //same here, these should always be the last/newest identity
 }

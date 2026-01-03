@@ -15,7 +15,7 @@ type User struct {
 
 type Identity struct {
 	ID         uuid.UUID
-	PubKey     string
+	PubKey     []byte
 	EncPrivKey []byte
 	Active     bool
 	UserID     uuid.UUID

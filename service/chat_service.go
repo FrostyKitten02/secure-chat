@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"github.com/google/uuid"
 	"secure-chat/dto"
 	"secure-chat/repo"
@@ -36,7 +37,7 @@ func GetChatsForUser(ctx context.Context, userID uuid.UUID) ([]dto.ChatDto, erro
 				Username:   receiverUser.Username,
 				UserId:     receiverId.String(),
 				IdentityId: recIdentity.ID,
-				PubKey:     recIdentity.PubKey,
+				PubKey:     base64.StdEncoding.EncodeToString(recIdentity.PubKey),
 			},
 		})
 	}

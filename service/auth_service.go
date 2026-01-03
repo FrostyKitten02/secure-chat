@@ -76,7 +76,7 @@ func LoginUser(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 			ExpiresIn:    int(expiresIn.Seconds()),
 			RefreshToken: "REFRESH_TOKEN", //TODO!!!
 
-			PubKey:     identity.PubKey,
+			PubKey:     base64.StdEncoding.EncodeToString(identity.PubKey),
 			EncPrivKey: base64.StdEncoding.EncodeToString(identity.EncPrivKey),
 		},
 	}, nil
@@ -143,7 +143,7 @@ func validateRegisterRequest(req *dto.RegisterRequest) error {
 		return errors.New("encrypt private key is empty")
 	}
 
-	if req.Body.PubKey == "" {
+	if req.Body.PubKey == nil || len(req.Body.PubKey) == 0 {
 		return errors.New("public key is empty")
 	}
 

@@ -6,7 +6,7 @@ type RegisterRequest struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 
-		PubKey     string `json:"pubKey"`
+		PubKey     []byte `json:"pubKey"`
 		EncPrivKey []byte `json:"encPrivKey"`
 	}
 }
