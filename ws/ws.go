@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"secure-chat/repo"
 	"secure-chat/service"
+	"strings"
 	"sync"
 	"time"
 )
@@ -59,7 +60,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	//FIXME: currently jwt verification only happens when client connects, we have to check it on each action we preform, to validate the session is still valid
 	jwt := jwtHeaderVal[0]
-	claims, jwtErr := service.VerifyJWT(jwt)
+	claims, jwtErr := service.VerifyJWT(strings.Replace(jwt, "Bearer ", "", 1))
 	if jwtErr != nil {
 		//TODO: tell client jwt is invalid
 		return
@@ -71,10 +72,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
 	//closing old connections on reconnect
 	removeClient(usrId)
 
+	mu.Lock()
 	clients[usrId] = &client{
 		UserID: userUUID,
 		Conn:   conn,
@@ -136,29 +137,35 @@ func sendMessageToClient(recipient uuid.UUID, message WsNewMessageRecieved) {
 				"error", err.Error(),
 			)
 		}
-	}(message.SenderIdentityId, recipient)
+	}(message.FromUserID.String(), recipient)
 
-	if c, ok := clients[recipient.String()]; ok {
-		parsedMsg, parsedMsgErr := json.Marshal(message)
-		if parsedMsgErr != nil {
-			slog.Error("failed to marshal message", "error", parsedMsgErr.Error())
-			//FIXME: tell client about the error!!1
-			return
-		}
-		writeErr := c.Conn.WriteMessage(websocket.TextMessage, parsedMsg)
-		if writeErr != nil {
-			slog.Error("failed to write message", "error", writeErr.Error())
-			//FIXME: can we tell the client that it failed???
-		}
+	mu.RLock()
+	c, ok := clients[recipient.String()]
+	mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	parsedMsg, parsedMsgErr := json.Marshal(message)
+	if parsedMsgErr != nil {
+		slog.Error("failed to marshal message", "error", parsedMsgErr.Error())
+		//FIXME: tell client about the error!!1
+		return
+	}
+	writeErr := c.Conn.WriteMessage(websocket.TextMessage, parsedMsg)
+	if writeErr != nil {
+		slog.Error("failed to write message", "error", writeErr.Error())
+		//FIXME: can we tell the client that it failed???
 	}
 }
 
 func removeClient(usrId string) {
+	mu.Lock()
+	defer mu.Unlock()
+
 	if old, ok := clients[usrId]; ok {
-		oldClientErr := old.Conn.Close()
-		if oldClientErr != nil {
-			slog.Warn("Failed to close old client", "error", oldClientErr)
-		}
+		_ = old.Conn.Close()
 		delete(clients, usrId)
 	}
 }
