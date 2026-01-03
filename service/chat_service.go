@@ -24,9 +24,16 @@ func GetChatsForUser(ctx context.Context, userID uuid.UUID) ([]dto.ChatDto, erro
 		if identityErr != nil {
 			return nil, identityErr
 		}
+
+		receiverUser, recUsrErr := repo.FindUserByID(ctx, receiverId.String())
+		if recUsrErr != nil {
+			return nil, recUsrErr
+		}
+
 		res = append(res, dto.ChatDto{
 			ID: c.ID.String(),
 			User: dto.ChatUserDto{
+				Username:   receiverUser.Username,
 				UserId:     receiverId.String(),
 				IdentityId: recIdentity.ID,
 				PubKey:     recIdentity.PubKey,
