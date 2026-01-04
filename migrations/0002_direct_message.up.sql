@@ -4,6 +4,7 @@ CREATE TABLE direct_message
     sender_id            UUID  NOT NULL,
     receiver_id          UUID  NOT NULL,
     cipher_text          BYTEA NOT NULL,
+    nonce                BYTEA NOT NULL,
     sender_identity_id   UUID  NOT NULL,
     receiver_identity_id UUID  NOT NULL,
     created_at           TIMESTAMP WITH TIME ZONE DEFAULT now()

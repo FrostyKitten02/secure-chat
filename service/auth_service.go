@@ -62,6 +62,12 @@ func LoginUser(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 		slog.Error("Error generating JWT token", "error", jwtErr.Error())
 		return nil, huma.Error500InternalServerError("Internal Server Error", jwtErr)
 	}
+
+	identity, identityErr := repo.FindActiveIdentityForUser(context.Background(), dbUser.ID.String())
+	if identityErr != nil {
+		return nil, huma.Error500InternalServerError("Internal server error", identityErr)
+	}
+
 	return &dto.LoginResponse{
 		Status: http.StatusOK,
 		Body: dto.LoginResponseBody{
@@ -69,6 +75,9 @@ func LoginUser(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 			TokenType:    "Bearer",
 			ExpiresIn:    int(expiresIn.Seconds()),
 			RefreshToken: "REFRESH_TOKEN", //TODO!!!
+
+			PubKey:     base64.StdEncoding.EncodeToString(identity.PubKey),
+			EncPrivKey: base64.StdEncoding.EncodeToString(identity.EncPrivKey),
 		},
 	}, nil
 }
@@ -134,7 +143,7 @@ func validateRegisterRequest(req *dto.RegisterRequest) error {
 		return errors.New("encrypt private key is empty")
 	}
 
-	if req.Body.PubKey == "" {
+	if req.Body.PubKey == nil || len(req.Body.PubKey) == 0 {
 		return errors.New("public key is empty")
 	}
 

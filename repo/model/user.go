@@ -13,9 +13,20 @@ type User struct {
 	CreatedAt time.Time
 }
 
+type DirectMessage struct {
+	ID                 uuid.UUID
+	SenderID           uuid.UUID
+	ReceiverID         uuid.UUID
+	CipherText         []byte
+	Nonce              []byte
+	SenderIdentityID   uuid.UUID
+	ReceiverIdentityID uuid.UUID
+	CreatedAt          time.Time
+}
+
 type Identity struct {
 	ID         uuid.UUID
-	PubKey     string
+	PubKey     []byte
 	EncPrivKey []byte
 	Active     bool
 	UserID     uuid.UUID

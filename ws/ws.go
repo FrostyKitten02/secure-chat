@@ -1,13 +1,18 @@
 package ws
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"log/slog"
 	"net/http"
+	"secure-chat/repo"
 	"secure-chat/service"
+	"strings"
 	"sync"
+	"time"
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,6 +34,7 @@ var (
 type WsSendNewMessage struct {
 	ToUserID           uuid.UUID `json:"toUserId"`
 	CipherText         string    `json:"cipherText"`
+	Nonce              string    `json:"nonce"`
 	SenderIdentityId   string    `json:"senderIdentityId"`   //used to know how to get the key!!
 	ReceiverIdentityId string    `json:"ReceiverIdentityId"` //same here, these should always be the last/newest identity
 }
@@ -36,6 +42,7 @@ type WsSendNewMessage struct {
 type WsNewMessageRecieved struct {
 	FromUserID         uuid.UUID `json:"fromUserId"`
 	CipherText         string    `json:"cipherText"`
+	Nonce              string    `json:"nonce"`
 	SenderIdentityId   string    `json:"senderIdentityId"`
 	ReceiverIdentityId string    `json:"ReceiverIdentityId"`
 }
@@ -55,7 +62,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	//FIXME: currently jwt verification only happens when client connects, we have to check it on each action we preform, to validate the session is still valid
 	jwt := jwtHeaderVal[0]
-	claims, jwtErr := service.VerifyJWT(jwt)
+	claims, jwtErr := service.VerifyJWT(strings.Replace(jwt, "Bearer ", "", 1))
 	if jwtErr != nil {
 		//TODO: tell client jwt is invalid
 		return
@@ -67,10 +74,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
 	//closing old connections on reconnect
 	removeClient(usrId)
 
+	mu.Lock()
 	clients[usrId] = &client{
 		UserID: userUUID,
 		Conn:   conn,
@@ -97,6 +104,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			message := WsNewMessageRecieved{
 				CipherText:         sendMsg.CipherText,
 				FromUserID:         userUUID,
+				Nonce:              sendMsg.Nonce,
 				SenderIdentityId:   sendMsg.SenderIdentityId,
 				ReceiverIdentityId: sendMsg.ReceiverIdentityId,
 			}
@@ -118,29 +126,80 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TODO: store message in db!!!
 func sendMessageToClient(recipient uuid.UUID, message WsNewMessageRecieved) {
-	if c, ok := clients[recipient.String()]; ok {
-		parsedMsg, parsedMsgErr := json.Marshal(message)
-		if parsedMsgErr != nil {
-			slog.Error("failed to marshal message", "error", parsedMsgErr.Error())
-			//FIXME: tell client about the error!!1
+	go func(sender string, receiver uuid.UUID) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := repo.CreateChatIfNotExists(ctx, sender, receiver.String()); err != nil {
+			slog.Error(
+				"failed to create chat",
+				"sender", sender,
+				"receiver", receiver.String(),
+				"error", err.Error(),
+			)
+		}
+	}(message.FromUserID.String(), recipient)
+
+	go func(sender string, receiver uuid.UUID, message WsNewMessageRecieved) {
+		cipherTextDecoded, cipherTextErr := base64.StdEncoding.DecodeString(message.CipherText)
+		if cipherTextErr != nil {
+			slog.Error("failed to decode cipherText", "sender", sender, "receiver", receiver, "error", cipherTextErr.Error())
 			return
 		}
-		writeErr := c.Conn.WriteMessage(websocket.TextMessage, parsedMsg)
-		if writeErr != nil {
-			slog.Error("failed to write message", "error", writeErr.Error())
-			//FIXME: can we tell the client that it failed???
+
+		nonceDecoded, nonceErr := base64.StdEncoding.DecodeString(message.Nonce)
+		if nonceErr != nil {
+			slog.Error("failed to decode nonce", "sender", sender, "receiver", receiver, "error", nonceErr.Error())
+			return
 		}
+
+		//FIXME: we should get identity from WS message, for now since we only use one identity this is fine!
+		recIdentity, recIdErr := repo.FindActiveIdentityForUser(context.Background(), recipient.String())
+		if recIdErr != nil {
+			slog.Error("bad receiver identity", "sender", sender, "receiver", receiver, "error", recIdErr.Error())
+			return
+		}
+
+		senIdentity, senIdErr := repo.FindActiveIdentityForUser(context.Background(), sender)
+		if senIdErr != nil {
+			slog.Error("bad sender identity", "sender", sender, "receiver", receiver, "error", senIdErr.Error())
+			return
+		}
+
+		saveErr := repo.CreateDirectMessage(context.Background(), sender, receiver.String(), cipherTextDecoded, nonceDecoded, senIdentity.ID.String(), recIdentity.ID.String())
+		if saveErr != nil {
+			slog.Error("failed to save message", "sender", sender, "receiver", receiver, "error", saveErr.Error())
+		}
+	}(message.FromUserID.String(), recipient, message)
+
+	mu.RLock()
+	c, ok := clients[recipient.String()]
+	mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	parsedMsg, parsedMsgErr := json.Marshal(message)
+	if parsedMsgErr != nil {
+		slog.Error("failed to marshal message", "error", parsedMsgErr.Error())
+		//FIXME: tell client about the error!!1
+		return
+	}
+	writeErr := c.Conn.WriteMessage(websocket.TextMessage, parsedMsg)
+	if writeErr != nil {
+		slog.Error("failed to write message", "error", writeErr.Error())
+		//FIXME: can we tell the client that it failed???
 	}
 }
 
 func removeClient(usrId string) {
+	mu.Lock()
+	defer mu.Unlock()
+
 	if old, ok := clients[usrId]; ok {
-		oldClientErr := old.Conn.Close()
-		if oldClientErr != nil {
-			slog.Warn("Failed to close old client", "error", oldClientErr)
-		}
+		_ = old.Conn.Close()
 		delete(clients, usrId)
 	}
 }

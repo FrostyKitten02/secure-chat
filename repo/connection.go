@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	sq "github.com/Masterminds/squirrel"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -12,6 +13,7 @@ import (
 	"secure-chat/util"
 )
 
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 var Pool *pgxpool.Pool
 
 func InitDB(dsn string) error {
