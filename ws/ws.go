@@ -41,6 +41,7 @@ type WsSendNewMessage struct {
 type WsNewMessageRecieved struct {
 	FromUserID         uuid.UUID `json:"fromUserId"`
 	CipherText         string    `json:"cipherText"`
+	Nonce              string    `json:"nonce"`
 	SenderIdentityId   string    `json:"senderIdentityId"`
 	ReceiverIdentityId string    `json:"ReceiverIdentityId"`
 }
@@ -102,6 +103,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			message := WsNewMessageRecieved{
 				CipherText:         sendMsg.CipherText,
 				FromUserID:         userUUID,
+				Nonce:              sendMsg.Nonce,
 				SenderIdentityId:   sendMsg.SenderIdentityId,
 				ReceiverIdentityId: sendMsg.ReceiverIdentityId,
 			}
